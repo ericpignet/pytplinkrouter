@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import base64
+import configparser
 from datetime import datetime
 import hashlib
 import logging
@@ -30,8 +31,9 @@ class TPLinkRouterFactory(object):
     def get_router(self):
         """Detect router type and return appropriate TPLinkRouter object."""
         for cls in [Tplink5DeviceScanner, Tplink4DeviceScanner,
-                    Tplink3DeviceScanner, Tplink2DeviceScanner,
-                    Tplink1DeviceScanner, TplinkDeviceScanner]:
+                    Tplink3DeviceScanner, TplinkArcherC20DeviceScanner,
+                    Tplink2DeviceScanner, Tplink1DeviceScanner,
+                    TplinkDeviceScanner]:
             scanner = cls(self.host, self.user, self.password)
             if scanner.success_init:
                 self.router = scanner
@@ -204,6 +206,53 @@ class Tplink2DeviceScanner(TplinkDeviceScanner):
         if result:
             self.last_results = {
                 device['mac_addr'].replace('-', ':'): device['name']
+                for device in result
+                }
+            return True
+
+        return False
+
+
+class TplinkArcherC20DeviceScanner(Tplink2DeviceScanner):
+    """This class queries an Archer C20 router with TP-Link firmware 160427."""
+
+    def _update_info(self):
+        """Ensure the information from the TP-Link router is up to date.
+
+        Return boolean if scanning successful.
+        """
+        _LOGGER.info("Loading wireless clients...")
+
+        url = 'http://{}/cgi?5'.format(self.host)
+        referer = 'http://{}'.format(self.host)
+
+        cookie = self.get_base64_cookie_string()
+        post_data = '[LAN_HOST_ENTRY#0,0,0,0,0,0#0,0,0,0,0,0]0,0\r\n'
+
+        response = requests.post(
+            url, post_data, headers={REFERER: referer, COOKIE: cookie},
+            timeout=4)
+
+        try:
+            config = configparser.ConfigParser(allow_no_value=True)
+            config.read_string(response.text)
+            result = []
+            for section in config.sections():
+                if 'IPAddress' in config[section]:
+                    entry = {
+                        'ip': config[section]['IPAddress'],
+                        'mac': config[section]['MACAddress'],
+                        'name': config[section]['hostName'],
+                    }
+                    result.append(entry)
+        except ValueError:
+            _LOGGER.error("Router didn't respond with JSON. "
+                          "Check if credentials are correct.")
+            return False
+
+        if result:
+            self.last_results = {
+                device['mac']: device['name']
                 for device in result
                 }
             return True

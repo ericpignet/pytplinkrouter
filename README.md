@@ -31,4 +31,5 @@ for i in router.scan_devices():
 
 Supported routers
 -----------------
-The code is working with 6 versions of the TPLink router user interface. However I have no idea what router models are supported.
+The code is working with several versions of the TPLink router user interface.
+However I have no idea what router models are supported, except Archer C20.
